@@ -1,11 +1,6 @@
 from playwright.sync_api import sync_playwright
 import json
 import time
-import re
-
-# 키워드 설정
-keywords_to_check = ["경상남도", "시약제조업", "차량렌트업","직접생산", "직접 생산","부산광역시","대전광역시"]
-count_keyword = "제안서"
 
 def save_login_state():
     with sync_playwright() as p:
@@ -41,85 +36,71 @@ def search_and_print(file_path="keywords.txt"):
         page = context.new_page()
         
         # KBID 메인 페이지 접속
-        page.goto("https://www.kbid.co.kr", wait_until="load", timeout=30000)
+        page.goto("https://www.kbid.co.kr", wait_until="load")
         print("KBID 접속 완료")
 
         # txt 파일 한 줄씩 읽기
         with open(file_path, "r", encoding="utf-8") as f:
-            for keyword in f:
-                keyword = keyword.strip()
+            for line in f:
+                keyword = line.strip()
                 if not keyword:
                     continue
 
                 print(f"\n검색: {keyword}")
 
                 # 검색바에 입력
-                search_selector = "#s_search_word"
+                search_selector = "#s_search_word"  # KBID 검색 input id 확인 필요
                 page.fill(search_selector, keyword)
-                page.press(search_selector, "Enter")
-
+                page.press(search_selector, "Enter")                
                 # 검색 결과 로딩 대기
-                result_selector = "#listBody1 tr:nth-child(1) td.subject a"
+                result_selector = "#listBody1 tr:nth-child(1) td.subject a"  # 제일 위 공고                
                 try:
-                    page.wait_for_selector(result_selector, timeout=10000)  # 타임아웃 증가
+                    page.wait_for_selector(result_selector, timeout=5000)
                 except:
                     print("검색 결과 없음")
                     continue
 
-                # 새 탭 열기
                 with page.expect_popup() as popup_info:
                     page.click(result_selector)
                 new_tab = popup_info.value
-                new_tab.wait_for_load_state("networkidle", timeout=30000)  # networkidle로 변경
-
-                # 상세 페이지 로딩
+                new_tab.wait_for_load_state("load")
+                # 공고 상세 내용 로딩 대기
                 detail_selector = ".gongo_detail"
                 try:
-                    new_tab.wait_for_selector(detail_selector, timeout=60000)  # 타임아웃 증가
-                    new_tab.wait_for_function(
-                        "() => document.querySelector('.gongo_detail')?.innerText?.length > 0",
-                        timeout=60000
-                    )  # 텍스트 로딩 확인
+                    new_tab.wait_for_selector(detail_selector, timeout=50000)
                     detail_elements = new_tab.query_selector_all(detail_selector)
-                    subject_number = 0
-                    matched = False
-
                     if detail_elements:
                         for detail_element in detail_elements:
-                            text = detail_element.inner_text().strip()
-                            time.sleep(1)  # 텍스트 안정화 대기
-                            if not text:
-                                continue
-                            if re.search(count_keyword, text):
-                                subject_number += 1
-                            # 키워드 검색 최적화
-                            for kw in keywords_to_check:
-                                if re.search(kw, text):
-                                    print(f"02. {text}", kw)
-                                    matched = True
-                            
-                        if not matched and subject_number == 0:
-                            print("가능, 직접확인 필요.")
-                        elif not matched and subject_number > 0:
-                            print("가능, 제안서 수:", subject_number)
-                        else:
-                            pass
-                    else:
-                        print("이미지형태, 직접확인 필요.")
+                            print(detail_element.inner_text().strip())
 
+                        # 상세 페이지에서 이미지 추출 (첫 번째 이미지만)                  
+                        # detail_img_element = detail_element.query_selector('img')
+                        # if detail_img_element:                            
+                        #     detail_screenshot_path = f"{keyword}.png"                            
+                        #     detail_img_element.screenshot(path=detail_screenshot_path)
+                        #     print(f"상세 페이지 이미지 저장 완료: {detail_screenshot_path}")
+                        #     #bid_inner > div.bid_main.analysis_main > div.newTabTy > div:nth-child(4) > div > div > div > div > img:nth-child(1)
+                        #     # OCR on the detail page image
+                        #     try:
+                        #         text_from_detail_image = pytesseract.image_to_string(Image.open(detail_screenshot_path), lang='kor')
+                        #         print(f"'{keyword}' 상세 페이지 이미지에서 추출된 텍스트: {text_from_detail_image.strip()}")
+                        #     except Exception as e:
+                        #         print(f"상세 페이지 OCR 처리 중 오류 발생: {e}")
+                        # else:
+                        #     print("상세 페이지에서 이미지를 찾을 수 없습니다.")
+                    else:
+                        print("직접확인 필요.")
                 except Exception as e:
                     print(f"상세 페이지 처리 중 오류: {e}")
                 finally:
-                    new_tab.close()
-
-                # 다음 검색 준비
-                page.goto("https://www.kbid.co.kr", wait_until="load", timeout=30000)
-                time.sleep(2)  # 페이지 안정화 대기
+                    new_tab.close() 
+                page.goto("https://www.kbid.co.kr", wait_until="load")
+                time.sleep(1)  # 다음 검색 전 약간 대기
 
         browser.close()
 
 # 1회 로그인 상태 저장
-# save_login_state()
+#save_login_state()
 
 # 이후 실행
 search_and_print()
